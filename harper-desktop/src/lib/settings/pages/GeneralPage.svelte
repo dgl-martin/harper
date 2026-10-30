@@ -272,7 +272,7 @@ async function saveDebounceMs() {
 
             <SettingRow top>
               <strong>Automatically check for updates</strong>
-              <p>Harper will check for new versions daily.</p>
+              <p>Updates are disabled for this German preview build.</p>
               <p class="result-summary">
                 Current version: {currentVersion || 'loading...'} · Latest version: {latestVersion || 'loading...'}
               </p>
@@ -280,7 +280,7 @@ async function saveDebounceMs() {
                 slot="control"
                 appearance="settings"
                 checked={autoUpdate}
-                disabled={isAutoUpdateLoading || isAutoUpdateSaving}
+                disabled
                 on:click={() => setAutoUpdate(!autoUpdate)}
               >
                 {#if autoUpdate}<CheckIcon className="control-icon" />{/if}
@@ -291,10 +291,10 @@ async function saveDebounceMs() {
                 unstyled
                 class="button"
                 type="button"
-                disabled={isCheckingForUpdates}
+                disabled
                 on:click={checkForUpdates}
               >
-                {isCheckingForUpdates ? 'Checking...' : 'Check for updates'}
+                Updates Disabled
               </Button>
             </div>
             {#if isAutoUpdateLoading}

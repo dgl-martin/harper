@@ -1,8 +1,8 @@
 {
 	"$schema": "https://schema.tauri.app/config/2",
-	"productName": "Harper",
-	"version": "2.12.0",
-	"identifier": "com.elijahpotter.harper-desktop",
+	"productName": "Harper German Preview",
+	"version": "2.12.0-german.1",
+	"identifier": "com.github.dgl-martin.harper-german-preview",
 	"build": {
 		"beforeDevCommand": "pnpm dev",
 		"devUrl": "http://localhost:1420",

@@ -7,7 +7,7 @@ This branch is based on German-support PR #3402 at commit `75c77b497b10cad3b7925
 - The desktop application combines a Svelte 5/TypeScript/Vite frontend in `harper-desktop/` with a Rust/Tauri 2 backend in `harper-desktop/src-tauri/`. Tauri commands are the IPC boundary.
 - Shared language behavior is implemented in `harper-core/`. The desktop backend owns persisted configuration and resolves the macOS locale; the frontend must display and update that backend state without reducing it to an English-only model.
 - The Rust `Language` model supports BCP-47 parsing. German variants are `GermanDialect::Standard` (`de-DE`), `Austrian` (`de-AT`), and `Swiss` (`de-CH`); the desktop Cargo default `multilingual` feature enables German along with Portuguese, Slovak, and Polish.
-- macOS artifacts are built through the root `justfile`. Universal builds require both `aarch64-apple-darwin` and `x86_64-apple-darwin`; the unsigned universal DMG is the expected PR artifact. Signing, notarization, and updater signing are release-only operations that require externally configured secrets.
+- macOS artifacts are built through the root `justfile`. This branch packages `Harper German Preview` under its own bundle ID and config directory, with official-channel updates disabled so local preview builds cannot replace themselves. Universal builds require both `aarch64-apple-darwin` and `x86_64-apple-darwin`; signing and notarization require externally configured secrets.
 
 ## Commands
 

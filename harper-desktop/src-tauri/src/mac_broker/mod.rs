@@ -52,7 +52,7 @@ use self::window_stability::{
 };
 
 /// Must match `identifier` in `tauri.conf.json`.
-const BUNDLE_ID: &str = "com.elijahpotter.harper-desktop";
+const BUNDLE_ID: &str = "com.github.dgl-martin.harper-german-preview";
 
 /// macOS implementation of the OS data the highlighter needs.
 ///

@@ -15,6 +15,7 @@ const LATEST_VERSION_URL: &str = "https://writewithharper.com/latestversion";
 const DAY_MS: u64 = 24 * 60 * 60 * 1000;
 const POLL_INTERVAL: Duration = Duration::from_secs(60);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const PREVIEW_UPDATES_ENABLED: bool = false;
 
 /// Outcome of an attempted update, using the settings UI's existing status names.
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -102,6 +103,16 @@ impl DesktopUpdater {
         app: &AppHandle<R>,
         automatic: bool,
     ) -> Option<UpdateResult> {
+        if !PREVIEW_UPDATES_ENABLED {
+            return (!automatic).then(|| UpdateResult {
+                status: UpdateStatus::UpToDate,
+                current_version: Some(Self::current_version(app)),
+                latest_version: None,
+                message: "Updates are disabled for Harper German Preview.".into(),
+                error: None,
+            });
+        }
+
         self.run_update(|installed_update| async move {
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -152,6 +163,10 @@ impl DesktopUpdater {
 /// check eligibility, not the network. Skip missed ticks after sleep rather than catching up.
 /// This task lives with the main process, including when all windows are closed.
 pub fn start_auto_updates(app: AppHandle) {
+    if !PREVIEW_UPDATES_ENABLED {
+        return;
+    }
+
     tauri::async_runtime::spawn(async move {
         let mut interval = tokio::time::interval(POLL_INTERVAL);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);

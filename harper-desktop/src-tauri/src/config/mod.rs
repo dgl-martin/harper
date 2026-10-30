@@ -158,7 +158,7 @@ impl Config {
             auto_enable_new_apps: false,
             onboarding_completed: false,
             debounce_ms: 0,
-            auto_update: true,
+            auto_update: false,
             last_update_check: None,
             highlighter_service_enabled: true,
         }
@@ -345,7 +345,7 @@ impl Config {
 
     #[allow(dead_code)]
     fn folder_path() -> Option<PathBuf> {
-        dirs::config_dir().map(|path| path.join("harper-desktop"))
+        dirs::config_dir().map(|path| path.join("harper-german-preview"))
     }
 
     #[allow(dead_code)]
@@ -413,7 +413,7 @@ impl Config {
             onboarding_completed: deserialize_optional_field(object, "onboarding_completed")?
                 .unwrap_or(true),
             debounce_ms: deserialize_optional_field(object, "debounce_ms")?.unwrap_or(0),
-            auto_update: deserialize_optional_field(object, "auto_update")?.unwrap_or(true),
+            auto_update: deserialize_optional_field(object, "auto_update")?.unwrap_or(false),
             last_update_check: deserialize_optional_field::<Option<u64>>(
                 object,
                 "last_update_check",
@@ -738,7 +738,7 @@ mod tests {
 
         let deserialized = Config::deserialize_main(&value.to_string()).unwrap();
 
-        assert!(deserialized.auto_update);
+        assert!(!deserialized.auto_update);
         assert_eq!(deserialized.last_update_check, None);
     }
 
@@ -806,13 +806,13 @@ mod tests {
     }
 
     #[test]
-    fn main_path_points_to_harper_desktop_config_file() {
+    fn main_path_points_to_preview_config_file() {
         let path = Config::main_path().unwrap();
 
         assert_eq!(path.file_name().unwrap(), "config.json");
         assert_eq!(
             path.parent().unwrap().file_name().unwrap(),
-            "harper-desktop"
+            "harper-german-preview"
         );
     }
 
@@ -862,13 +862,13 @@ mod tests {
     }
 
     #[test]
-    fn dictionary_path_points_to_harper_desktop_dictionary_file() {
+    fn dictionary_path_points_to_preview_dictionary_file() {
         let path = Config::dictionary_path().unwrap();
 
         assert_eq!(path.file_name().unwrap(), "dictionary.txt");
         assert_eq!(
             path.parent().unwrap().file_name().unwrap(),
-            "harper-desktop"
+            "harper-german-preview"
         );
     }
 }
