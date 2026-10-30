@@ -1,25 +1,20 @@
 <script lang="ts">
 import { Button, Checkbox, CheckIcon, Input, Select, SettingRow } from 'components';
-import type { Dialect } from 'harper.js';
 import { onMount } from 'svelte';
 import { Client } from '$lib/client';
-import { DIALECT_OPTIONS } from '../settings-data';
-
-const DialectValue = {
-	American: 0,
-	British: 1,
-	Australian: 2,
-	Canadian: 3,
-	Indian: 4,
-} as const;
+import {
+	LANGUAGE_OPTIONS,
+	languageSelectionToSettingsValue,
+	settingsValueToLanguageSelection,
+} from '$lib/language-selection';
 
 let menuBar = true;
 let launchAtStartup = false;
 let autoUpdate = true;
-let dialect = 'american';
-let isDialectLoading = true;
-let isDialectSaving = false;
-let dialectError = '';
+let language = 'system';
+let isLanguageLoading = true;
+let isLanguageSaving = false;
+let languageError = '';
 let isLaunchAtStartupLoading = true;
 let isLaunchAtStartupSaving = false;
 let launchAtStartupError = '';
@@ -37,15 +32,15 @@ let isDebounceSaving = false;
 let debounceError = '';
 
 onMount(() => {
-	void loadDialect();
+	void loadLanguage();
 	void loadLaunchAtStartup();
 	void loadAutoUpdate();
 	void loadUpdateVersions();
 	void loadDebounceMs();
 
 	const refreshSettings = () => {
-		if (!isDialectSaving) {
-			void loadDialect();
+		if (!isLanguageSaving) {
+			void loadLanguage();
 		}
 
 		if (!isLaunchAtStartupSaving) {
@@ -72,33 +67,30 @@ onMount(() => {
 	};
 });
 
-async function loadDialect() {
-	isDialectLoading = true;
-	dialectError = '';
+async function loadLanguage() {
+	isLanguageLoading = true;
+	languageError = '';
 
 	try {
-		dialect = dialectToSettingsValue(await Client.getDialect());
+		language = languageSelectionToSettingsValue(await Client.getLanguageSelection());
 	} catch (error) {
-		dialectError = `Unable to load dialect: ${error}`;
+		languageError = `Unable to load language: ${error}`;
 	} finally {
-		isDialectLoading = false;
+		isLanguageLoading = false;
 	}
 }
 
-async function setDialect(value: string) {
-	const previousDialect = dialect;
-
-	dialect = value;
-	isDialectSaving = true;
-	dialectError = '';
+async function setLanguage(value: string) {
+	isLanguageSaving = true;
+	languageError = '';
 
 	try {
-		await Client.setDialect(settingsValueToDialect(value));
+		await Client.setLanguageSelection(settingsValueToLanguageSelection(value));
+		language = value;
 	} catch (error) {
-		dialect = previousDialect;
-		dialectError = `Unable to save dialect: ${error}`;
+		languageError = `Unable to save language: ${error}`;
 	} finally {
-		isDialectSaving = false;
+		isLanguageSaving = false;
 	}
 }
 
@@ -237,36 +229,6 @@ async function saveDebounceMs() {
 		isDebounceSaving = false;
 	}
 }
-
-function dialectToSettingsValue(dialect: Dialect): string {
-	switch (dialect) {
-		case DialectValue.British:
-			return 'british';
-		case DialectValue.Canadian:
-			return 'canadian';
-		case DialectValue.Australian:
-			return 'australian';
-		case DialectValue.Indian:
-			return 'indian';
-		default:
-			return 'american';
-	}
-}
-
-function settingsValueToDialect(value: string): Dialect {
-	switch (value) {
-		case 'british':
-			return DialectValue.British as Dialect;
-		case 'canadian':
-			return DialectValue.Canadian as Dialect;
-		case 'australian':
-			return DialectValue.Australian as Dialect;
-		case 'indian':
-			return DialectValue.Indian as Dialect;
-		default:
-			return DialectValue.American as Dialect;
-	}
-}
 </script>
 
 <section>
@@ -352,29 +314,29 @@ function settingsValueToDialect(value: string): Dialect {
         <div class="stanza">
           <div class="eyebrow">Language</div>
           <p class="section-copy">
-            Choose the dialect Harper uses to check spelling and grammar.
+            Choose the language Harper uses to check spelling and grammar.
           </p>
           <div class="inline-row">
-            <label for="dialect">English dialect:</label>
+            <label for="language">Language:</label>
             <Select
               unstyled
-              id="dialect"
+              id="language"
               class="select wide"
-              disabled={isDialectLoading || isDialectSaving}
-              bind:value={dialect}
-              on:change={(event) => setDialect((event.detail.currentTarget as HTMLSelectElement).value)}
+              disabled={isLanguageLoading || isLanguageSaving}
+              value={language}
+              on:change={(event) => setLanguage((event.detail.currentTarget as HTMLSelectElement).value)}
             >
-              {#each DIALECT_OPTIONS as option}
+              {#each LANGUAGE_OPTIONS as option}
                 <option value={option.value}>{option.label}</option>
               {/each}
             </Select>
           </div>
-          {#if isDialectLoading}
-            <p class="result-summary">Loading dialect...</p>
-          {:else if dialectError}
-            <p class="result-summary">{dialectError}</p>
-          {:else if isDialectSaving}
-            <p class="result-summary">Saving dialect...</p>
+          {#if isLanguageLoading}
+            <p class="result-summary">Loading language...</p>
+          {:else if languageError}
+            <p class="result-summary">{languageError}</p>
+          {:else if isLanguageSaving}
+            <p class="result-summary">Saving language...</p>
           {/if}
         </div>
 

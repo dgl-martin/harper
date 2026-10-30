@@ -102,7 +102,7 @@ export interface SettingsState {
 	menuBarClick: 'open-settings' | 'show-menu' | 'toggle-pause' | 'quick-review';
 	launchAtStartup: boolean;
 	autoUpdate: boolean;
-	dialect: string;
+	language: string;
 	strictness: 'relaxed' | 'standard' | 'strict';
 	liveCheck: boolean;
 	respectCode: boolean;
@@ -117,14 +117,6 @@ export interface SettingsState {
 	removedBuiltins: string[];
 	weirpacks: Weirpack[];
 }
-
-export const DIALECT_OPTIONS = [
-	{ value: 'american', label: 'American English' },
-	{ value: 'british', label: 'British English' },
-	{ value: 'canadian', label: 'Canadian English' },
-	{ value: 'australian', label: 'Australian English' },
-	{ value: 'indian', label: 'Indian English' },
-];
 
 export const RULE_GROUPS: RuleGroup[] = [
 	{
@@ -259,7 +251,7 @@ export function createInitialSettingsState(): SettingsState {
 		menuBarClick: 'open-settings',
 		launchAtStartup: true,
 		autoUpdate: true,
-		dialect: 'american',
+		language: 'system',
 		strictness: 'standard',
 		liveCheck: true,
 		respectCode: true,

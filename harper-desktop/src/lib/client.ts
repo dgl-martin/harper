@@ -1,23 +1,13 @@
 import { invoke } from '@tauri-apps/api/core';
 import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart';
 import type {
-	Dialect,
 	Lint,
 	LintConfig,
 	Linter,
 	LocalLinter as LocalLinterType,
 	StructuredLintConfig,
 } from 'harper.js';
-
-type RustDialect = 'American' | 'British' | 'Australian' | 'Canadian' | 'Indian';
-
-const DialectValue = {
-	American: 0,
-	British: 1,
-	Australian: 2,
-	Canadian: 3,
-	Indian: 4,
-} as const;
+import { type LanguageSelection, parseLanguageSelection } from './language-selection';
 
 const ACCESSIBILITY_PERMISSION_TIMEOUT_MS = 6_000;
 
@@ -77,12 +67,12 @@ export class Client {
 		return JSON.parse(await configLinter.getStructuredLintConfigJSON()) as StructuredLintConfig;
 	}
 
-	static async getDialect(): Promise<Dialect> {
-		return rustDialectToDialect(await invoke<RustDialect>('get_dialect'));
+	static async getLanguageSelection(): Promise<LanguageSelection> {
+		return parseLanguageSelection(await invoke<unknown>('get_language_selection'));
 	}
 
-	static async setDialect(dialect: Dialect): Promise<void> {
-		await invoke('set_dialect', { dialect: dialectToRustDialect(dialect) });
+	static async setLanguageSelection(languageSelection: LanguageSelection): Promise<void> {
+		await invoke('set_language_selection', { languageSelection });
 	}
 
 	static async getDebounceMs(): Promise<number> {
@@ -241,35 +231,5 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
 		if (timeoutId) {
 			clearTimeout(timeoutId);
 		}
-	}
-}
-
-function rustDialectToDialect(dialect: RustDialect): Dialect {
-	switch (dialect) {
-		case 'British':
-			return DialectValue.British as Dialect;
-		case 'Australian':
-			return DialectValue.Australian as Dialect;
-		case 'Canadian':
-			return DialectValue.Canadian as Dialect;
-		case 'Indian':
-			return DialectValue.Indian as Dialect;
-		default:
-			return DialectValue.American as Dialect;
-	}
-}
-
-function dialectToRustDialect(dialect: Dialect): RustDialect {
-	switch (dialect) {
-		case DialectValue.British:
-			return 'British';
-		case DialectValue.Australian:
-			return 'Australian';
-		case DialectValue.Canadian:
-			return 'Canadian';
-		case DialectValue.Indian:
-			return 'Indian';
-		default:
-			return 'American';
 	}
 }

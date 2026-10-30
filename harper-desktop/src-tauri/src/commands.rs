@@ -1,16 +1,14 @@
 //! This module centralizes all the Rust commands to be made available to the JavaScript
 //! environment. Use [`application_message_handler`] to load them into the Tauri runtime.
 
-use crate::config::Config;
+use crate::config::{Config, LanguageSelection};
 use crate::desktop_updater::{DesktopUpdater, UpdateResult};
 use crate::highlighter_service::HighlighterService;
 use crate::os_broker::{AccessibilityPermissionStatus, AppSearchResult, OsBroker};
 use crate::{IntegrationView, PlatformBroker};
 use base64::{Engine as _, engine::general_purpose};
 use harper_core::{
-    DictWordMetadata, IgnoredLints, Language,
-    linting::FlatConfig,
-    spell::{Dictionary, MutableDictionary},
+    DictWordMetadata, IgnoredLints, Language, linting::FlatConfig, spell::Dictionary,
 };
 use std::sync::{Arc, RwLock};
 use tauri::ipc::Invoke;
@@ -20,6 +18,7 @@ use tokio::sync::Mutex;
 pub fn application_message_handler<R: Runtime>() -> impl Fn(Invoke<R>) -> bool {
     tauri::generate_handler![
         get_lint_config,
+        get_language_selection,
         get_dialect,
         get_debounce_ms,
         set_debounce_ms,
@@ -30,6 +29,7 @@ pub fn application_message_handler<R: Runtime>() -> impl Fn(Invoke<R>) -> bool {
         update_to_latest,
         get_onboarding_completed,
         set_onboarding_completed,
+        set_language_selection,
         set_dialect,
         set_lint_config,
         get_dictionary,
@@ -63,6 +63,13 @@ async fn get_lint_config(config: State<'_, Arc<Mutex<Config>>>) -> Result<FlatCo
 #[tauri::command]
 async fn get_dialect(config: State<'_, Arc<Mutex<Config>>>) -> Result<Language, String> {
     Ok(config.lock().await.dialect)
+}
+
+#[tauri::command]
+async fn get_language_selection(
+    config: State<'_, Arc<Mutex<Config>>>,
+) -> Result<LanguageSelection, String> {
+    Ok(config.lock().await.language_selection.clone())
 }
 
 #[tauri::command]
@@ -153,12 +160,27 @@ async fn set_dialect(
     dialect: Language,
     config: State<'_, Arc<Mutex<Config>>>,
 ) -> Result<(), String> {
+    let language_selection = LanguageSelection::from_language(dialect)?;
+    set_language_selection(language_selection, config).await
+}
+
+#[tauri::command]
+async fn set_language_selection(
+    language_selection: LanguageSelection,
+    config: State<'_, Arc<Mutex<Config>>>,
+) -> Result<(), String> {
     let mut config = config.lock().await;
-    config.dialect = dialect;
-    config
-        .save_to_system()
-        .await
-        .map_err(|error| error.to_string())?;
+    let previous_language_selection = config.language_selection.clone();
+    let previous_dialect = config.dialect;
+    let previous_dictionary = config.mutable_dictionary.clone();
+    config.set_language_selection(language_selection)?;
+
+    if let Err(error) = config.save_to_system().await {
+        config.language_selection = previous_language_selection;
+        config.dialect = previous_dialect;
+        config.mutable_dictionary = previous_dictionary;
+        return Err(error.to_string());
+    }
 
     Ok(())
 }
@@ -200,16 +222,8 @@ async fn set_dictionary(
     words: Vec<String>,
     config: State<'_, Arc<Mutex<Config>>>,
 ) -> Result<(), String> {
-    let mut dictionary = MutableDictionary::new();
-    dictionary.extend_words(words.into_iter().map(|word| {
-        (
-            word.chars().collect::<Vec<_>>(),
-            DictWordMetadata::default(),
-        )
-    }));
-
     let mut config = config.lock().await;
-    config.mutable_dictionary = dictionary;
+    config.mutable_dictionary = Config::mutable_dictionary_from_words(words, config.dialect);
     config
         .save_to_system()
         .await

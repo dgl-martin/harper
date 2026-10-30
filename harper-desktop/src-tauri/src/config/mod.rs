@@ -5,19 +5,130 @@ use crate::{PlatformBroker, os_broker::OsBroker};
 pub use error::Error;
 pub use integration::Integration;
 
-use harper_core::language::{new_curated_for_language, parse_language};
+use harper_core::language::{new_curated_for_language, parse_language, parser_for_prose};
 use harper_core::{
-    Dialect, IgnoredLints, Language,
+    Dialect, DictWordMetadata, Document, IgnoredLints, Language,
     linting::{FlatConfig, LintGroup},
-    spell::{MergedDictionary, MutableDictionary},
+    parsers::MarkdownOptions,
+    spell::{Dictionary, MergedDictionary, MutableDictionary},
 };
 use harper_dictionary_wordlist::{load_dict, save_dict};
-use serde::de::{DeserializeOwned, Error as _};
+use serde::{
+    Deserialize, Serialize,
+    de::{DeserializeOwned, Error as _},
+};
 use std::{fs, io, path::PathBuf, sync::Arc};
+
+const LANGUAGE_VARIANTS: &[(&str, &str, &str)] = &[
+    ("en", "US", "en-US"),
+    ("en", "GB", "en-GB"),
+    ("en", "AU", "en-AU"),
+    ("en", "CA", "en-CA"),
+    ("en", "IN", "en-IN"),
+    ("de", "DE", "de-DE"),
+    ("de", "AT", "de-AT"),
+    ("de", "CH", "de-CH"),
+    ("pl", "PL", "pl-PL"),
+    ("pt", "PT", "pt-PT"),
+    ("pt", "BR", "pt-BR"),
+    ("pt", "AO", "ao"),
+    ("sk", "SK", "sk-SK"),
+];
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LanguageSelection {
+    pub mode: LanguageSelectionMode,
+    pub language: Option<String>,
+    pub region: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LanguageSelectionMode {
+    System,
+    Explicit,
+}
+
+impl LanguageSelection {
+    pub fn system() -> Self {
+        Self {
+            mode: LanguageSelectionMode::System,
+            language: None,
+            region: None,
+        }
+    }
+
+    pub fn explicit(language: impl Into<String>, region: impl Into<String>) -> Self {
+        Self {
+            mode: LanguageSelectionMode::Explicit,
+            language: Some(language.into()),
+            region: Some(region.into()),
+        }
+    }
+
+    pub fn from_language(language: Language) -> Result<Self, String> {
+        LANGUAGE_VARIANTS
+            .iter()
+            .find(|(_, _, alias)| parse_language(alias) == Some(language))
+            .map(|(language, region, _)| Self::explicit(*language, *region))
+            .ok_or_else(|| format!("unsupported desktop language: {language}"))
+    }
+
+    fn normalize(self) -> Result<(Self, Language), String> {
+        let locale = tauri_plugin_os::locale();
+        self.normalize_with_locale(locale.as_deref())
+    }
+
+    fn normalize_with_locale(
+        self,
+        system_locale: Option<&str>,
+    ) -> Result<(Self, Language), String> {
+        match self.mode {
+            LanguageSelectionMode::System => {
+                if self.language.is_some() || self.region.is_some() {
+                    return Err(
+                        "system language selection must not include language or region".to_string(),
+                    );
+                }
+
+                Ok((
+                    Self::system(),
+                    system_locale.and_then(parse_language).unwrap_or_default(),
+                ))
+            }
+            LanguageSelectionMode::Explicit => {
+                let language = self
+                    .language
+                    .as_deref()
+                    .ok_or_else(|| "explicit language selection requires `language`".to_string())?;
+                let region = self
+                    .region
+                    .as_deref()
+                    .ok_or_else(|| "explicit language selection requires `region`".to_string())?;
+                let (language, region, alias) = LANGUAGE_VARIANTS
+                    .iter()
+                    .find(|(candidate_language, candidate_region, _)| {
+                        candidate_language.eq_ignore_ascii_case(language)
+                            && candidate_region.eq_ignore_ascii_case(region)
+                    })
+                    .ok_or_else(|| {
+                        format!("unsupported desktop language selection: {language}-{region}")
+                    })?;
+                let dialect = parse_language(alias).ok_or_else(|| {
+                    format!("language support is not enabled for {language}-{region}")
+                })?;
+
+                Ok((Self::explicit(*language, *region), dialect))
+            }
+        }
+    }
+}
 
 /// User-controlled app state needed by Tauri commands and the highlighter process.
 pub struct Config {
     pub mutable_dictionary: MutableDictionary,
+    pub language_selection: LanguageSelection,
     pub dialect: Language,
     pub ignored_lints: IgnoredLints,
     pub lint_config: FlatConfig,
@@ -35,9 +146,12 @@ pub struct Config {
 
 impl Config {
     pub fn new() -> Self {
+        let language_selection = LanguageSelection::system();
+
         Self {
             mutable_dictionary: MutableDictionary::new(),
             dialect: Self::detect_system_dialect(),
+            language_selection,
             ignored_lints: IgnoredLints::new(),
             lint_config: FlatConfig::new_curated(),
             integrations: Integration::curated_integrations(),
@@ -54,6 +168,41 @@ impl Config {
         tauri_plugin_os::locale()
             .and_then(|bcp47| parse_language(&bcp47))
             .unwrap_or_default()
+    }
+
+    pub fn set_language_selection(
+        &mut self,
+        language_selection: LanguageSelection,
+    ) -> Result<(), String> {
+        let (language_selection, dialect) = language_selection.normalize()?;
+        let words = self
+            .mutable_dictionary
+            .words_iter()
+            .map(|word| word.iter().collect::<String>())
+            .collect::<Vec<_>>();
+        self.language_selection = language_selection;
+        self.dialect = dialect;
+        self.mutable_dictionary = Self::mutable_dictionary_from_words(words, dialect);
+
+        Ok(())
+    }
+
+    pub fn mutable_dictionary_from_words(
+        words: impl IntoIterator<Item = String>,
+        language: Language,
+    ) -> MutableDictionary {
+        let mut dictionary = MutableDictionary::new();
+        dictionary.extend_words(words.into_iter().map(|word| {
+            (
+                word.chars().collect::<Vec<_>>(),
+                DictWordMetadata {
+                    dialects: language.dictionary_dialect_flags(),
+                    ..Default::default()
+                },
+            )
+        }));
+
+        dictionary
     }
 
     pub fn is_integration_enabled(&self, bundle_id: &str) -> bool {
@@ -165,13 +314,33 @@ impl Config {
         Arc::new(dictionary)
     }
 
+    pub fn document_from_user_dictionary(
+        text: &str,
+        language: Language,
+        user_dictionary: MutableDictionary,
+    ) -> Document {
+        let dictionary = Self::dictionary_from_user_dictionary(language, user_dictionary);
+        let parser = parser_for_prose("markdown", language, MarkdownOptions::default())
+            .expect("markdown parser must exist for every desktop language");
+
+        Document::new(text, &parser, &dictionary)
+    }
+
     fn create_dictionary(&self) -> Arc<MergedDictionary> {
         Self::dictionary_from_user_dictionary(self.dialect, self.mutable_dictionary.clone())
     }
 
+    #[cfg(test)]
+    fn create_document(&self, text: &str) -> Document {
+        Self::document_from_user_dictionary(text, self.dialect, self.mutable_dictionary.clone())
+    }
+
     pub fn create_linter(&self) -> LintGroup {
-        new_curated_for_language(self.create_dictionary(), self.dialect)
-            .with_lint_config(self.lint_config.clone())
+        let linter = new_curated_for_language(self.create_dictionary(), self.dialect);
+        let mut lint_config = linter.config.clone();
+        lint_config.merge_from(self.lint_config.clone());
+
+        linter.with_lint_config(lint_config)
     }
 
     #[allow(dead_code)]
@@ -193,6 +362,7 @@ impl Config {
     fn serialize_main(&self) -> serde_json::Result<String> {
         serde_json::to_string(&serde_json::json!({
             "dialect": serialize_language_compat(self.dialect),
+            "language_selection": &self.language_selection,
             "ignored_lints": &self.ignored_lints,
             "lint_config": &self.lint_config,
             "integrations": &self.integrations,
@@ -212,14 +382,28 @@ impl Config {
             .as_object_mut()
             .ok_or_else(|| serde_json::Error::custom("config must be a JSON object"))?;
 
+        let legacy_dialect = {
+            let value = object
+                .remove("dialect")
+                .ok_or_else(|| serde_json::Error::custom("missing config field `dialect`"))?;
+            deserialize_language_compat(value)?
+        };
+        let (language_selection, dialect) =
+            match deserialize_optional_field::<LanguageSelection>(object, "language_selection")? {
+                Some(language_selection) => language_selection
+                    .normalize()
+                    .map_err(serde_json::Error::custom)?,
+                None => (
+                    LanguageSelection::from_language(legacy_dialect)
+                        .map_err(serde_json::Error::custom)?,
+                    legacy_dialect,
+                ),
+            };
+
         Ok(Self {
             mutable_dictionary: MutableDictionary::new(),
-            dialect: {
-                let value = object
-                    .remove("dialect")
-                    .ok_or_else(|| serde_json::Error::custom("missing config field `dialect`"))?;
-                deserialize_language_compat(value)?
-            },
+            language_selection,
+            dialect,
             ignored_lints: deserialize_field(object, "ignored_lints")?,
             lint_config: deserialize_field(object, "lint_config")?,
             integrations: deserialize_optional_field(object, "integrations")?
@@ -317,8 +501,8 @@ impl Default for Config {
 
 #[cfg(test)]
 mod tests {
-    use super::{Config, Integration};
-    use harper_core::{Dialect, DictWordMetadata, Language};
+    use super::{Config, Integration, LanguageSelection, LanguageSelectionMode};
+    use harper_core::{Dialect, DictWordMetadata, Language, linting::Linter};
 
     #[test]
     fn serialize_main_excludes_dictionary_word_list() {
@@ -332,6 +516,7 @@ mod tests {
         assert!(!serialized.contains("mutable_dictionary"));
         assert!(!serialized.contains("blorple"));
         assert!(serialized.contains("dialect"));
+        assert!(serialized.contains("language_selection"));
         assert!(serialized.contains("ignored_lints"));
         assert!(serialized.contains("lint_config"));
         assert!(serialized.contains("integrations"));
@@ -345,7 +530,9 @@ mod tests {
     #[test]
     fn serialize_main_writes_english_as_a_plain_dialect_string() {
         let mut config = Config::new();
-        config.dialect = Language::English(Dialect::British);
+        config
+            .set_language_selection(LanguageSelection::explicit("en", "GB"))
+            .unwrap();
 
         let serialized = config.serialize_main().unwrap();
 
@@ -368,7 +555,9 @@ mod tests {
         use harper_core::language::german::dialects::GermanDialect;
 
         let mut config = Config::new();
-        config.dialect = Language::German(GermanDialect::Standard);
+        config
+            .set_language_selection(LanguageSelection::explicit("de", "DE"))
+            .unwrap();
 
         let serialized = config.serialize_main().unwrap();
 
@@ -422,10 +611,15 @@ mod tests {
             "dialect".to_string(),
             serde_json::Value::String("American".to_string()),
         );
+        value.as_object_mut().unwrap().remove("language_selection");
 
         let deserialized = Config::deserialize_main(&value.to_string()).unwrap();
 
         assert_eq!(deserialized.dialect, Language::English(Dialect::American));
+        assert_eq!(
+            deserialized.language_selection,
+            LanguageSelection::explicit("en", "US")
+        );
     }
 
     #[test]
@@ -437,10 +631,89 @@ mod tests {
             "dialect".to_string(),
             serde_json::json!({ "English": "British" }),
         );
+        value.as_object_mut().unwrap().remove("language_selection");
 
         let deserialized = Config::deserialize_main(&value.to_string()).unwrap();
 
         assert_eq!(deserialized.dialect, Language::English(Dialect::British));
+        assert_eq!(
+            deserialized.language_selection,
+            LanguageSelection::explicit("en", "GB")
+        );
+    }
+
+    #[test]
+    fn system_language_selection_resolves_supported_german_locales() {
+        for (locale, expected_region) in [("de-DE", "DE"), ("de-AT", "AT"), ("de-CH", "CH")] {
+            let (_, dialect) = LanguageSelection::system()
+                .normalize_with_locale(Some(locale))
+                .unwrap();
+            let expected = LanguageSelection::explicit("de", expected_region)
+                .normalize_with_locale(None)
+                .unwrap()
+                .1;
+
+            assert_eq!(dialect, expected);
+        }
+    }
+
+    #[test]
+    fn explicit_language_selection_supports_english_and_german_variants() {
+        for (language, region) in [
+            ("en", "US"),
+            ("en", "GB"),
+            ("en", "AU"),
+            ("en", "CA"),
+            ("en", "IN"),
+            ("de", "DE"),
+            ("de", "AT"),
+            ("de", "CH"),
+        ] {
+            let (selection, _) = LanguageSelection::explicit(language, region)
+                .normalize_with_locale(None)
+                .unwrap();
+
+            assert_eq!(
+                selection,
+                LanguageSelection::explicit(language, region),
+                "{language}-{region}"
+            );
+        }
+    }
+
+    #[test]
+    fn changing_language_retags_user_dictionary_words() {
+        use harper_core::spell::Dictionary;
+
+        let mut config = Config::new();
+        config
+            .mutable_dictionary
+            .append_word_str("Harperwort", DictWordMetadata::default());
+        config
+            .set_language_selection(LanguageSelection::explicit("de", "AT"))
+            .unwrap();
+
+        let metadata = config
+            .mutable_dictionary
+            .get_word_metadata_str("Harperwort")
+            .unwrap();
+        assert_eq!(metadata.dialects, config.dialect.dictionary_dialect_flags());
+    }
+
+    #[test]
+    fn invalid_language_selections_are_rejected() {
+        let invalid_system = LanguageSelection {
+            mode: LanguageSelectionMode::System,
+            language: Some("de".to_string()),
+            region: Some("DE".to_string()),
+        };
+
+        assert!(invalid_system.normalize_with_locale(Some("de-DE")).is_err());
+        assert!(
+            LanguageSelection::explicit("de", "US")
+                .normalize_with_locale(None)
+                .is_err()
+        );
     }
 
     #[test]
@@ -555,6 +828,29 @@ mod tests {
         );
         assert!(dict.contains_word("Haus".chars().collect::<Vec<_>>().as_slice()));
         assert!(dict.contains_word("Freiheit".chars().collect::<Vec<_>>().as_slice()));
+    }
+
+    #[cfg(feature = "de")]
+    #[test]
+    fn german_selection_drives_desktop_linting() {
+        let mut config = Config::new();
+        config
+            .set_language_selection(LanguageSelection::explicit("de", "DE"))
+            .unwrap();
+        let correct = config.create_document("Der Hund ist im Garten. Die Katze schläft.");
+        let incorrect =
+            config.create_document("Der Hund ist da. dieser Satz ist klein. Worrt und flasch.");
+        let correct_lints = config.create_linter().lint(&correct);
+        let incorrect_lints = config.create_linter().lint(&incorrect);
+
+        assert!(
+            correct_lints.len() <= 2,
+            "correct German text produced unexpected lints: {correct_lints:?}"
+        );
+        assert!(
+            incorrect_lints.len() > correct_lints.len(),
+            "intentional German errors were not detected: {incorrect_lints:?}"
+        );
     }
 
     #[test]

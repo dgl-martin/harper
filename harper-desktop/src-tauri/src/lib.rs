@@ -5,7 +5,7 @@ use self::highlighter::Highlighter;
 use self::highlighter_service::HighlighterService;
 use self::tray::set_up_tray_menu;
 use crate::communication::{Client, ProtocolError};
-use crate::config::{Config, Integration};
+use crate::config::{Config, Integration, LanguageSelection};
 use crate::debounce::{DebounceState, DebounceStatus};
 use clap::{Parser, Subcommand};
 use harper_core::{
@@ -332,11 +332,11 @@ pub fn run_highlighter(has_parent: bool) {
             DebounceStatus::Ready => {}
         }
 
-        let dictionary = Config::dictionary_from_user_dictionary(
+        let doc = Config::document_from_user_dictionary(
+            text,
             *lint_dialect.borrow(),
             lint_user_dictionary.borrow().clone(),
         );
-        let doc = Document::new_markdown_default(text, &dictionary);
         let mut organized_lints = lint_linter.borrow_mut().organized_lints(&doc);
 
         for lints in organized_lints.values_mut() {
@@ -374,6 +374,8 @@ pub fn run_highlighter(has_parent: bool) {
         let lint_config = dictionary_linter.borrow().config.clone();
         let config = Config {
             mutable_dictionary: dictionary_user_dictionary.borrow().clone(),
+            language_selection: LanguageSelection::from_language(*dictionary_dialect.borrow())
+                .expect("highlighter dialect must have a desktop language selection"),
             dialect: *dictionary_dialect.borrow(),
             ignored_lints: IgnoredLints::new(),
             lint_config,
@@ -501,6 +503,8 @@ fn fetch_highlighter_config(
 
         Ok(Config {
             dialect,
+            language_selection: LanguageSelection::from_language(dialect)
+                .expect("server dialect must have a desktop language selection"),
             mutable_dictionary,
             ignored_lints,
             lint_config,
