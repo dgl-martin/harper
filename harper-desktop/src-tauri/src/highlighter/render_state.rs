@@ -147,17 +147,17 @@ impl RenderState {
             .map(|positioned_lint| popup_rect_for_lint(&positioned_lint.rect))
     }
 
-    /// Draws highlights and the active popup from the same state used by hit-testing so visible
-    /// regions and clickable regions do not drift apart.
-    pub fn render(&mut self, ui: &mut egui::Ui) {
+    /// Draws global accessibility rectangles in one monitor-local overlay.
+    pub fn render(&mut self, ui: &mut egui::Ui, screen_origin: egui::Vec2) {
         for positioned_lint in self.lints() {
-            draw_highlight(ui, &positioned_lint.rect, &positioned_lint.lint);
+            let rect = monitor_local_rect(&positioned_lint.rect, screen_origin);
+            draw_highlight(ui, &rect, &positioned_lint.lint);
         }
 
         if let Some(index) = self.highlighted_lint
             && let Some(positioned_lint) = self.lints().get(index)
         {
-            let rect = positioned_lint.rect;
+            let rect = monitor_local_rect(&positioned_lint.rect, screen_origin);
             let lint = positioned_lint.lint.clone();
             let source_text = positioned_lint.source_text.clone();
 
@@ -731,6 +731,15 @@ fn rect_bounds(rect: &Rect) -> egui::Rect {
     )
 }
 
+fn monitor_local_rect(rect: &Rect, screen_origin: egui::Vec2) -> Rect {
+    Rect {
+        x: rect.x - f64::from(screen_origin.x),
+        y: rect.y - f64::from(screen_origin.y),
+        width: rect.width,
+        height: rect.height,
+    }
+}
+
 /// Defines popup geometry ahead of rendering so the transparent overlay can enable or disable native
 /// hit-testing based on our intended layout, not a previous frame's measured egui output.
 fn popup_rect_for_lint(rect: &Rect) -> egui::Rect {
@@ -769,4 +778,19 @@ fn blend(from: egui::Color32, to: egui::Color32, to_weight: f32) -> egui::Color3
         ((f32::from(fg) * from_weight) + (f32::from(tg) * to_weight)) as u8,
         ((f32::from(fb) * from_weight) + (f32::from(tb) * to_weight)) as u8,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn translates_global_rect_into_monitor_local_coordinates() {
+        let rect = Rect::new(1800.0, 240.0, 80.0, 20.0);
+
+        assert_eq!(
+            monitor_local_rect(&rect, egui::vec2(1728.0, 100.0)),
+            Rect::new(72.0, 140.0, 80.0, 20.0)
+        );
+    }
 }

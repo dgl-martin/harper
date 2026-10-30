@@ -191,7 +191,9 @@ impl TreeVisitor for RectCollector<'_> {
             }
         }
 
-        TreeWalkerFlow::Continue
+        // The editable element already owns the complete text value. Some apps, including
+        // Outlook, expose extremely deep or cyclic descendants beneath it.
+        TreeWalkerFlow::SkipSubtree
     }
     fn exit_element(&self, _element: &AXUIElement) {}
 }

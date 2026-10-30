@@ -141,6 +141,7 @@ impl MacBroker {
         pid: pid_t,
         bundle_id: &str,
         app: &AXUIElement,
+        verification_root: &AXUIElement,
     ) -> bool {
         let needs_new_activation = match &self.accessibility_activation {
             Some(state) => state.pid != pid || state.bundle_id != bundle_id,
@@ -171,7 +172,7 @@ impl MacBroker {
                     return false;
                 }
 
-                let verification = verify_accessibility_activation(app);
+                let verification = verify_accessibility_activation(verification_root);
 
                 if verification == AccessibilityActivationVerification::FoundTextRangeBounds {
                     eprintln!(
@@ -340,8 +341,9 @@ impl OsBroker for MacBroker {
             return Some(Vec::new());
         }
 
-        let el = AXUIElement::application(pid);
-        if !self.ensure_accessibility_activation(pid, &bundle_identifier, &el) {
+        let app = AXUIElement::application(pid);
+        let verification_root = target.element.as_ref().unwrap_or(&app);
+        if !self.ensure_accessibility_activation(pid, &bundle_identifier, &app, verification_root) {
             return None;
         }
 

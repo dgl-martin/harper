@@ -23,6 +23,7 @@ pub struct Window {
     egui_state: egui_winit::State,
     painter: Painter,
     viewport_id: egui::ViewportId,
+    screen_origin: egui::Vec2,
 }
 
 impl Window {
@@ -52,6 +53,7 @@ impl Window {
         let _ = window.request_inner_size(PhysicalSize::new(size.width, size.height));
         window.set_cursor_hittest(false)?;
         let viewport_id = egui::ViewportId::from_hash_of(window.id());
+        let logical_position = position.to_logical::<f32>(window.scale_factor());
 
         let egui_state = egui_winit::State::new(
             context.clone(),
@@ -83,6 +85,7 @@ impl Window {
             egui_state,
             painter,
             viewport_id,
+            screen_origin: egui::vec2(logical_position.x, logical_position.y),
         })
     }
 
@@ -126,7 +129,7 @@ impl Window {
         let context = self.egui_state.egui_ctx().clone();
         let input = self.egui_state.take_egui_input(&self.inner);
         let output = context.run_ui(input, |ui| {
-            render_state.render(ui);
+            render_state.render(ui, self.screen_origin);
         });
 
         self.egui_state

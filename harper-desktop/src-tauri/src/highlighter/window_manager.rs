@@ -235,7 +235,10 @@ impl ApplicationHandler for WindowManagerApp {
         let monitors = event_loop.available_monitors().collect::<Vec<_>>();
 
         for monitor in monitors {
-            match pollster::block_on(Window::new(event_loop, monitor, self.context.clone())) {
+            let context = egui::Context::default();
+            context.set_global_style((*self.context.global_style()).clone());
+
+            match pollster::block_on(Window::new(event_loop, monitor, context)) {
                 Ok(window) => self.windows.push(window),
                 Err(error) => {
                     self.error = Some(error);
