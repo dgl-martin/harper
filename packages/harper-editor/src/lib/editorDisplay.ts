@@ -14,6 +14,11 @@ export type EditorFontFamily = 'sans' | 'serif' | 'mono';
 
 export type EditorFontSize = 'default' | number;
 
+export interface EditorLanguageOption {
+	value: string;
+	label: string;
+}
+
 export type LintKindCounts = Record<LintKind, number>;
 
 export const FONT_OPTIONS: {

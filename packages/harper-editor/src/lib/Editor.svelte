@@ -12,6 +12,7 @@ import { fade } from 'svelte/transition';
 import {
 	type EditorFontFamily,
 	type EditorFontSize,
+	type EditorLanguageOption,
 	fontStackFor,
 	normalizeFontFamily,
 	normalizeFontSize,
@@ -28,6 +29,11 @@ export let onReady: () => void = () => null;
 export let defaultFontFamily: EditorFontFamily = 'sans';
 export let defaultFontSize: EditorFontSize = 'default';
 export let onChange: (text: string) => void = () => {};
+export let linterRevision = 0;
+export let languageOptions: EditorLanguageOption[] = [];
+export let language = '';
+export let languageDisabled = false;
+export let onLanguageChange: (language: string) => void = () => {};
 
 let editor: HTMLDivElement | null;
 let linterVersion = 0;
@@ -116,6 +122,7 @@ $: {
 $: {
 	const version = ++linterVersion;
 	const activeLinter = linter;
+	const activeRevision = linterRevision;
 
 	lintBoxes = [];
 
@@ -127,7 +134,7 @@ $: {
 			console.error('Failed to initialize linter', error);
 		}
 
-		if (version !== linterVersion) {
+		if (version !== linterVersion || activeRevision !== linterRevision) {
 			return;
 		}
 
@@ -369,6 +376,10 @@ function hideSidebar(reason: SidebarAction = 'automated'): void {
 		problemCount={lintBoxes.length}
 		{fontFamily}
 		{fontSize}
+		{languageOptions}
+		{language}
+		{languageDisabled}
+		{onLanguageChange}
 		onFontFamilyChange={(next) => (fontFamily = next)}
 		onFontSizeChange={(next) => (fontSize = normalizeFontSize(next))}
 	/>

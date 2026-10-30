@@ -19,6 +19,7 @@ pub fn application_message_handler<R: Runtime>() -> impl Fn(Invoke<R>) -> bool {
     tauri::generate_handler![
         get_lint_config,
         get_language_selection,
+        get_resolved_language_selection,
         get_dialect,
         get_debounce_ms,
         set_debounce_ms,
@@ -70,6 +71,13 @@ async fn get_language_selection(
     config: State<'_, Arc<Mutex<Config>>>,
 ) -> Result<LanguageSelection, String> {
     Ok(config.lock().await.language_selection.clone())
+}
+
+#[tauri::command]
+async fn get_resolved_language_selection(
+    config: State<'_, Arc<Mutex<Config>>>,
+) -> Result<LanguageSelection, String> {
+    LanguageSelection::from_language(config.lock().await.dialect)
 }
 
 #[tauri::command]

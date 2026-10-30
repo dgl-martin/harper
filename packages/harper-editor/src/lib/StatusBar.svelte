@@ -2,6 +2,7 @@
 import {
 	type EditorFontFamily,
 	type EditorFontSize,
+	type EditorLanguageOption,
 	FONT_OPTIONS,
 	FONT_SIZES,
 	wordCount,
@@ -11,14 +12,19 @@ export let text = '';
 export let problemCount = 0;
 export let fontFamily: EditorFontFamily = 'sans';
 export let fontSize: EditorFontSize = 'default';
+export let languageOptions: EditorLanguageOption[] = [];
+export let language = '';
+export let languageDisabled = false;
 export let onFontFamilyChange: (fontFamily: EditorFontFamily) => void = () => {};
 export let onFontSizeChange: (fontSize: EditorFontSize) => void = () => {};
+export let onLanguageChange: (language: string) => void = () => {};
 
 const fontButtonClass =
 	'inline-flex h-4 min-w-7 items-center justify-center rounded px-2 text-xs leading-none font-medium text-stone-500';
 
 $: words = wordCount(text);
 $: chars = text.length;
+$: languageLabel = languageOptions.find((option) => option.value === language)?.label ?? 'Language';
 </script>
 
 <footer
@@ -45,6 +51,25 @@ $: chars = text.length;
 	<span>{chars} chars</span>
 
 	<span class="flex-1"></span>
+
+	{#if languageOptions.length > 0}
+		<label
+			class="relative inline-flex h-[18px] items-center rounded-[5px] border-[0.5px] border-stone-200 bg-stone-200/60 pr-[18px] pl-2 text-[11px] font-medium text-stone-950 after:absolute after:top-1/2 after:right-[5px] after:-translate-y-1/2 after:text-[9px] after:leading-none after:text-stone-500 after:content-['v'] after:[font-family:-apple-system,BlinkMacSystemFont,'SF_Pro_Text',sans-serif]"
+		>
+			<span>{languageLabel}</span>
+			<select
+				value={language}
+				disabled={languageDisabled}
+				class="absolute inset-0 border-0 opacity-0 disabled:cursor-wait"
+				aria-label="Editor language"
+				on:change={(event) => onLanguageChange(event.currentTarget.value)}
+			>
+				{#each languageOptions as option}
+					<option value={option.value}>{option.label}</option>
+				{/each}
+			</select>
+		</label>
+	{/if}
 
 	<div
 		class="inline-flex h-[18px] items-center rounded-[5px] border-[0.5px] border-stone-200 bg-stone-200/60 p-px"

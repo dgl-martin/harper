@@ -71,6 +71,18 @@ export class Client {
 		return parseLanguageSelection(await invoke<unknown>('get_language_selection'));
 	}
 
+	static async getResolvedLanguageSelection(): Promise<LanguageSelection> {
+		const selection = parseLanguageSelection(
+			await invoke<unknown>('get_resolved_language_selection'),
+		);
+
+		if (selection.mode !== 'explicit') {
+			throw new Error('Resolved language selection must be explicit.');
+		}
+
+		return selection;
+	}
+
 	static async setLanguageSelection(languageSelection: LanguageSelection): Promise<void> {
 		await invoke('set_language_selection', { languageSelection });
 	}

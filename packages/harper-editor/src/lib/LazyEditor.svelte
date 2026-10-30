@@ -1,13 +1,18 @@
 <script lang="ts">
 import { Spinner } from 'components';
 import type { Linter } from 'harper.js';
-import type { EditorFontFamily, EditorFontSize } from './editorDisplay.js';
+import type { EditorFontFamily, EditorFontSize, EditorLanguageOption } from './editorDisplay.js';
 
 export let content = '';
 export let linter: Linter;
 export let defaultFontFamily: EditorFontFamily = 'sans';
 export let defaultFontSize: EditorFontSize = 'default';
 export let onChange: (text: string) => void = () => {};
+export let linterRevision = 0;
+export let languageOptions: EditorLanguageOption[] = [];
+export let language = '';
+export let languageDisabled = false;
+export let onLanguageChange: (language: string) => void = () => {};
 
 let editor = import('./Editor.svelte');
 let loading = true;
@@ -26,6 +31,11 @@ function onReady() {
 			{defaultFontFamily}
 			{defaultFontSize}
 			{onChange}
+			{linterRevision}
+			{languageOptions}
+			{language}
+			{languageDisabled}
+			{onLanguageChange}
 		/>
 	</div>
 {/await}

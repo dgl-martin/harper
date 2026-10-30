@@ -35,3 +35,22 @@ test('sends the selected language to Tauri', async () => {
 		languageSelection: selection,
 	});
 });
+
+test('loads the resolved editor language from Tauri', async () => {
+	invoke.mockResolvedValue({ mode: 'explicit', language: 'de', region: 'CH' });
+
+	await expect(Client.getResolvedLanguageSelection()).resolves.toEqual({
+		mode: 'explicit',
+		language: 'de',
+		region: 'CH',
+	});
+	expect(invoke).toHaveBeenCalledWith('get_resolved_language_selection');
+});
+
+test('rejects an unresolved editor language from Tauri', async () => {
+	invoke.mockResolvedValue({ mode: 'system', language: null, region: null });
+
+	await expect(Client.getResolvedLanguageSelection()).rejects.toThrow(
+		'Resolved language selection must be explicit.',
+	);
+});

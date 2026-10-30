@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import { binary } from './binaries/binary';
 import LocalLinter from './LocalLinter';
+import { Dialect } from './main';
 import WorkerLinter from './WorkerLinter';
 import { packWeirpackFiles } from './weirpack';
 
@@ -62,6 +63,19 @@ const linters = {
 };
 
 for (const [linterName, Linter] of Object.entries(linters)) {
+	test(`${linterName} switches from English to German`, async () => {
+		const linter = new Linter({ binary });
+		const source = 'Hallo, das ist Deutsch.';
+
+		expect((await linter.lint(source)).length).toBeGreaterThan(0);
+
+		await linter.setDialect(Dialect.GermanStandard);
+
+		expect(await linter.lint(source)).toHaveLength(0);
+
+		await linter.dispose();
+	});
+
 	test(`${linterName} detects repeated words`, async () => {
 		const linter = new Linter({ binary });
 
